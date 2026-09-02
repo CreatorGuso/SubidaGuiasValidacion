@@ -21,7 +21,9 @@ module.exports = {
     ruc: process.env.SUNAT_RUC,
     usuarioSol: process.env.SUNAT_USUARIO_SOL,
     claveSol: process.env.SUNAT_CLAVE_SOL,
-    apiBase: 'https://api-cpe.sunat.gob.pe',
+    apiBase: 'https://api-cpe.sunat.gob.pe/v1',
+    seguridadBase: 'https://api-seguridad.sunat.gob.pe/v1',
+    scope: 'https://api-cpe.sunat.gob.pe',
   },
 
   certificates: {

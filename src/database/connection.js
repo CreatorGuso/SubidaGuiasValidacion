@@ -1,5 +1,5 @@
 const sql = require('mssql');
-const config = require('./index');
+const config = require('../config');
 
 let pool = null;
 

@@ -4,6 +4,7 @@ class Shipment {
     this.desTraslado = data.desTraslado || '';
     this.modTraslado = data.modTraslado || '01';
     this.fecTraslado = data.fecTraslado || null;
+    this.fecEntregaBienes = data.fecEntregaBienes || null;
     this.pesoTotal = data.pesoTotal || 0;
     this.undPesoTotal = data.undPesoTotal || 'KGM';
     this.numBultos = data.numBultos || 0;

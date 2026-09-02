@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Greenter API - Guías de Remisión</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    header h1 { font-size: 20px; font-weight: 600; }
+    header h1 span { color: #38bdf8; }
+    .health {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .health.ok::before { content: '● '; color: #22c55e; }
+    .health.down::before { content: '● '; color: #ef4444; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 32px;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      flex-wrap: wrap;
+    }
+
+    .toolbar label { font-size: 14px; font-weight: 500; color: #475569; }
+
+    .toolbar input {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
+      width: 90px;
+    }
+
+    button.btn {
+      padding: 9px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .05s;
+    }
+    button.btn:hover { opacity: .88; }
+    button.btn:active { transform: scale(.97); }
+    button.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-emitir { background: #16a34a; color: #fff; padding: 7px 14px; }
+    .btn-consultar { background: #f59e0b; color: #fff; padding: 7px 14px; }
+    .btn-detalle { background: #e2e8f0; color: #334155; padding: 7px 12px; }
+
+    main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      overflow: hidden;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+    thead th {
+      text-align: left;
+      padding: 12px 16px;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 11px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+    tbody tr:hover { background: #f8fafc; }
+
+    .num { font-weight: 600; white-space: nowrap; }
+    .muted { color: #94a3b8; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge.pendiente { background: #fef9c3; color: #a16207; }
+    .badge.enviado   { background: #dbeafe; color: #1d4ed8; }
+    .badge.aceptado  { background: #dcfce7; color: #15803d; }
+    .badge.rechazado { background: #fee2e2; color: #b91c1c; }
+    .badge.error     { background: #fee2e2; color: #b91c1c; }
+
+    .acciones { display: flex; gap: 6px; }
+
+    .estado-msg {
+      grid-column: 1 / -1;
+      font-size: 12px;
+      color: #64748b;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 48px 16px;
+      color: #94a3b8;
+      font-size: 15px;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      min-width: 300px;
+      max-width: 420px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s, transform .25s;
+      transform: translateY(12px);
+      z-index: 50;
+      line-height: 1.45;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { background: #15803d; }
+    #toast.error { background: #b91c1c; }
+    #toast.info { background: #1d4ed8; }
+
+    dialog {
+      border: none;
+      border-radius: 10px;
+      padding: 0;
+      width: min(720px, 92vw);
+      max-height: 80vh;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    }
+    dialog::backdrop { background: rgba(15,23,42,.5); }
+    .dlg-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      background: #0f172a;
+      color: #fff;
+      border-radius: 10px 10px 0 0;
+      font-weight: 600;
+    }
+    .dlg-head button {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .dlg-body { padding: 16px 20px; overflow: auto; max-height: calc(80vh - 54px); }
+    .dlg-body pre {
+      font-size: 12px;
+      background: #0f172a;
+      color: #7dd3fc;
+      padding: 14px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .dlg-body table.item-table { font-size: 13px; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚚 Greenter API — <span>Guías de Remisión Electrónicas</span></h1>
+  <div id="health" class="health">verificando…</div>
+</header>
+
+<div class="toolbar">
+  <label for="idEmpresa">Empresa</label>
+  <input type="text" id="idEmpresa" value="01">
+  <button class="btn btn-primary" onclick="cargarPendientes()">Buscar guías pendientes</button>
+  <span id="resumen" class="muted"></span>
+  <span style="flex:1"></span>
+  <label for="ticketInput">Ticket SUNAT</label>
+  <input type="text" id="ticketInput" placeholder="p.ej. 14d37e5f-74c4…" style="width:260px" onkeydown="if(event.key==='Enter')consultarTicket()">
+  <button class="btn btn-primary" onclick="consultarTicket()">Consultar estado</button>
+</div>
+
+<main>
+  <div class="card">
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Emisión</th>
+          <th>Destinatario</th>
+          <th>Traslado</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="6" class="empty">Ingrese la empresa y presione «Buscar guías pendientes».</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<dialog id="dlgDetalle">
+  <div class="dlg-head">
+    <span id="dlgTitulo">Detalle</span>
+    <button onclick="document.getElementById('dlgDetalle').close()">✕</button>
+  </div>
+  <div class="dlg-body" id="dlgBody"></div>
+</dialog>
+
+<dialog id="dlgEstado">
+  <div class="dlg-head">
+    <span>Estado en SUNAT</span>
+    <button onclick="document.getElementById('dlgEstado').close()">✕</button>
+  </div>
+  <div class="dlg-body" id="dlgEstadoBody"></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+
+function toast(msg, tipo = 'info', ms = 6000) {
+  const el = $('#toast');
+  el.className = `show ${tipo}`;
+  el.innerHTML = msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => (el.className = ''), ms);
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/health');
+    $('#health').textContent = 'API conectada';
+    $('#health').className = 'health ' + (r.ok ? 'ok' : 'down');
+  } catch {
+    $('#health').textContent = 'API sin conexión';
+    $('#health').className = 'health down';
+  }
+}
+
+function badgeEstado(estado) {
+  const map = {
+    2: ['pendiente', 'Pendiente'],
+    3: ['enviado', 'Enviado a SUNAT'],
+    1: ['aceptado', 'Aceptado'],
+    4: ['aceptado', 'Aceptado'],
+    5: ['rechazado', 'Rechazado'],
+    0: ['error', 'Error'],
+  };
+  const [cls, label] = map[Number(estado)] || ['pendiente', `Estado ${estado}`];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+// La vista documentos_sve puede variar: leemos con fallbacks
+function normalizar(r) {
+  return {
+    idEmpresa: String(r.idempresa ?? ''),
+    idOficina: String(r.idoficina ?? '01'),
+    idDocumento: String(r.iddocumento ?? ''),
+    serie: String(r.seriedoc ?? r.serie_doc ?? r.serie ?? '').trim(),
+    nroDoc: String(r.nrodoc ?? r.numero_doc ?? r.numerodoc ?? '').trim(),
+    fecha: r.fechaemision ?? r.fecha_doc ?? '',
+    cliente: r.nompersoneria ?? r.nombrecliente ?? r.cliente_razon ?? r.identificacion ?? '',
+    destino: r.direccionpl ?? r.llegada_direccion ?? '',
+    motivo: r.motivo ?? '',
+    estado: r.estado,
+    respuesta: r.respuesta_sunat ?? '',
+    ticket: String(r.id_sunat ?? r.idsunat ?? '').trim(),
+  };
+}
+
+async function cargarPendientes() {
+  const idEmpresa = $('#idEmpresa').value.trim() || '01';
+  const tbody = $('#tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="empty">Cargando…</td></tr>';
+
+  try {
+    const res = await fetch(`/api/guias/pendientes/${encodeURIComponent(idEmpresa)}`);
+    const json = await res.json();
+
+    if (!json.success) throw new Error(json.error || 'Error del servidor');
+
+    const guias = (json.data || []).map(normalizar);
+
+    if (guias.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No hay guías pendientes de envío.</td></tr>';
+      $('#resumen').textContent = '';
+      return;
+    }
+
+    $('#resumen').textContent = `${guias.length} guía(s) encontrada(s)`;
+
+    tbody.innerHTML = '';
+    for (const g of guias) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="num">${g.serie}-${g.nroDoc}</td>
+        <td>${formatFecha(g.fecha)}</td>
+        <td>${escapar(g.cliente)}<br><span class="muted">${escapar(g.destino)}</span></td>
+        <td>${escapar(g.motivo || '')}</td>
+        <td>${badgeEstado(g.estado)}
+            ${g.respuesta ? `<div class="estado-msg" title="${escapar(g.respuesta)}">${escapar(g.respuesta)}</div>` : ''}</td>
+        <td>
+          <div class="acciones">
+            ${g.estado == 2 ? `<button class="btn btn-emitir" onclick='emitir(${JSON.stringify(g).replaceAll("'", "&#39;")})'>Emitir</button>` : ''}
+            ${g.estado == 3 && g.ticket ? `<button class="btn btn-consultar" onclick="consultarTicket('${g.ticket}')">Consultar</button>` : ''}
+            <button class="btn btn-detalle" onclick="verDetalle('${g.idEmpresa}','${g.idOficina}','${g.idDocumento}','${g.serie}','${g.nroDoc}')">Ver detalle</button>
+          </div>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">⚠ ${escapar(err.message)}</td></tr>`;
+  }
+}
+
+async function emitir(g) {
+  toast(`Emitiendo guía <b>${g.serie}-${g.nroDoc}</b>…`, 'info', 15000);
+
+  try {
+    const res = await fetch('/api/guias/emitir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idEmpresa: g.idEmpresa,
+        idOficina: g.idOficina,
+        idDocumento: g.idDocumento,
+        serie: g.serie,
+        nroDoc: g.nroDoc,
+      }),
+    });
+    const json = await res.json();
+
+    if (json.success && json.ticket) {
+      toast(`✅ Guía enviada a SUNAT.<br>Ticket: <b>${json.ticket}</b>`, 'success');
+    } else {
+      toast(`❌ ${escapar(json.error || 'No se pudo emitir la guía')}`, 'error', 12000);
+    }
+  } catch (err) {
+    toast(`❌ Error de conexión: ${escapar(err.message)}`, 'error', 12000);
+  } finally {
+    cargarPendientes();
+  }
+}
+
+async function consultarTicket(ticket) {
+  if (!ticket) ticket = $('#ticketInput').value.trim();
+  if (!ticket) {
+    toast('Ingrese un número de ticket', 'error');
+    return;
+  }
+
+  const dlg = $('#dlgEstado');
+  $('#dlgEstadoBody').innerHTML = '<p>Consultando SUNAT…</p>';
+  dlg.showModal();
+
+  try {
+    const res = await fetch(`/api/guias/estado/${encodeURIComponent(ticket)}`);
+    const json = await res.json();
+
+    if (!json.success) throw new Error(json.error || 'Error del servidor');
+    mostrarEstado(json.data);
+  } catch (err) {
+    $('#dlgEstadoBody').innerHTML = `<p>⚠ ${escapar(err.message)}</p>`;
+  }
+}
+
+function mostrarEstado(d) {
+  const mapCod = {
+    '0': ['aceptado', '✔ Aceptado por SUNAT'],
+    '98': ['enviado', '⏳ En proceso'],
+    '99': ['rechazado', '✖ Rechazado por SUNAT'],
+  };
+  const [cls, titulo] = mapCod[d.estado] || ['error', `Código ${d.estado ?? '-'}`];
+
+  const cdrBtn = d.cdr
+    ? `<button class="btn btn-primary" onclick="descargarCdr('${d.ticket}')">Descargar CDR (.zip)</button>`
+    : '';
+
+  $('#dlgEstadoBody').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="badge ${cls}" style="font-size:14px;padding:8px 16px">${titulo}</span>
+      ${cdrBtn}
+    </div>
+    <table class="item-table">
+      <tbody>
+        <tr><td><b>Ticket</b></td><td>${escapar(d.ticket)}</td></tr>
+        <tr><td><b>Código respuesta</b></td><td>${escapar(d.estado)}</td></tr>
+        <tr><td><b>N° error</b></td><td>${d.numError ? escapar(d.numError) : '-'}</td></tr>
+        <tr><td><b>Descripción</b></td><td>${escapar(d.descripcion)}</td></tr>
+        <tr><td><b>CDR generado</b></td><td>${escapar(String(d.indCdrGenerado ?? '-'))}</td></tr>
+      </tbody>
+    </table>
+    <details><summary style="cursor:pointer;color:#64748b;font-size:12px">Ver JSON crudo</summary>
+      <pre>${escapar(JSON.stringify(d, null, 2))}</pre>
+    </details>`;
+
+  // Refrescar la lista para reflejar el nuevo estado sincronizado
+  if ($('#idEmpresa').value.trim() && $('#resumen').textContent) cargarPendientes();
+}
+
+function descargarCdr(ticket) {
+  fetch(`/api/guias/estado/${encodeURIComponent(ticket)}`)
+    .then((r) => r.json())
+    .then((json) => {
+      const b64 = json.data && json.data.cdr;
+      if (!b64) throw new Error('SUNAT no devolvió CDR para este ticket');
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/zip' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `CDR-${ticket}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch((err) => toast(`❌ ${escapar(err.message)}`, 'error'));
+}
+
+async function verDetalle(idEmpresa, idOficina, idDocumento, serie, nroDoc) {
+  const dlg = $('#dlgDetalle');
+  $('#dlgTitulo').textContent = `${serie}-${nroDoc} — Detalle del documento`;
+  $('#dlgBody').innerHTML = '<p>Cargando…</p>';
+  dlg.showModal();
+
+  try {
+    const qs = new URLSearchParams({ serie, nrodoc: nroDoc });
+    const res = await fetch(`/api/guias/detalle/${encodeURIComponent(idEmpresa)}/${encodeURIComponent(idOficina)}/${encodeURIComponent(idDocumento)}?${qs}`);
+    const json = await res.json();
+
+    if (!json.success) throw new Error(json.error);
+    const rows = json.data || [];
+
+    const cab = rows[0] || {};
+    const items = rows.map((r) => `
+      <tr>
+        <td>${escapar(String(r.nroitem ?? '').trim())}</td>
+        <td>${escapar(String(r.codigo ?? '').trim())}</td>
+        <td>${escapar(String(r.serviciobien ?? '').trim())}</td>
+        <td>${escapar(String(r.um_sunat ?? '').trim())}</td>
+        <td style="text-align:right">${Number(r.cantidad) || 0}</td>
+      </tr>`).join('');
+
+    $('#dlgBody').innerHTML = `
+      <table class="item-table">
+        <tbody>
+          <tr><td><b>F. emisión</b></td><td>${formatFecha(cab.fechaemision)}</td>
+              <td><b>F. inicio traslado</b></td><td>${formatFecha(cab.fechainicio)}</td></tr>
+          <tr><td><b>Destinatario</b></td><td colspan="3">${escapar(cab.nompersoneria ?? '')} (${escapar(cab.tipodocmtoSUNAT ?? '')} ${escapar(cab.nropersoneria ?? '')})</td></tr>
+          <tr><td><b>Motivo</b></td><td>${escapar(cab.tipomotivo ?? '')} - ${escapar(cab.motivo ?? '')}</td>
+              <td><b>Modalidad</b></td><td>${escapar(cab.tipomodalidad ?? '')} - ${escapar(cab.modalidad ?? '')}</td></tr>
+          <tr><td><b>Transportista</b></td><td>${escapar(cab.transportista ?? '')} (${escapar(cab.nrotranportista ?? '')})</td>
+              <td><b>Vehículo</b></td><td>${escapar(String(cab.placavehiculo ?? '').trim())}</td></tr>
+          <tr><td><b>Chofer</b></td><td>${escapar(cab.chofer ?? '')} (DNI ${escapar(cab.dnichofer ?? '')}, Lic. ${escapar(cab.nrochofer ?? '')})</td>
+              <td><b>Peso total</b></td><td>${cab.peso ?? 0} kg</td></tr>
+          <tr><td><b>Partida</b></td><td>${escapar(cab.dirSUNATpp ?? cab.direccionpp ?? '')} (Ubigeo ${escapar(cab.ubigeopp ?? '')})</td>
+              <td><b>Llegada</b></td><td>${escapar(cab.dirSUNATpl ?? cab.direccionpl ?? '')} (Ubigeo ${escapar(cab.ubigeopl ?? '')})</td></tr>
+        </tbody>
+      </table>
+      <table class="item-table">
+        <thead><tr><th>Item</th><th>Código</th><th>Descripción</th><th>UM</th><th style="text-align:right">Cantidad</th></tr></thead>
+        <tbody>${items}</tbody>
+      </table>
+      <details><summary style="cursor:pointer;color:#64748b;font-size:12px">Ver JSON crudo del SP</summary>
+        <pre>${escapar(JSON.stringify(rows, null, 2))}</pre>
+      </details>`;
+  } catch (err) {
+    $('#dlgBody').innerHTML = `<p>⚠ ${escapar(err.message)}</p>`;
+  }
+}
+
+function formatFecha(fecha) {
+  if (!fecha) return '-';
+  const d = new Date(fecha);
+  if (isNaN(d)) return escapar(String(fecha));
+  return d.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function escapar(texto) {
+  return String(texto ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+checkHealth();
+setInterval(checkHealth, 30000);
+</script>
+</body>
+</html>

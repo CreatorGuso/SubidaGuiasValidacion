@@ -13,10 +13,10 @@ const CATALOGOS = {
     'A': 'Cédula Diplomática',
   },
 
-  // Cat. 18 - Modalidad de traslado
+  // Cat. 18 - Modalidad de traslado (01=Transporte público, 02=Transporte privado)
   transferModes: {
-    '01': 'Transporte privado',
-    '02': 'Transporte público',
+    '01': 'Transporte público',
+    '02': 'Transporte privado',
   },
 
   // Cat. 20 - Motivo de traslado

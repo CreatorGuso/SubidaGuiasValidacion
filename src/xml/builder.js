@@ -2,40 +2,38 @@ const { create } = require('xmlbuilder2');
 
 class XmlBuilder {
   constructor() {
+    // Declaraciones de namespaces para el elemento raíz
     this.ns = {
-      'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
-      'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
-      'ext': 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2',
-      'ds': 'http://www.w3.org/2000/09/xmldsig#',
-      '': 'urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2',
+      xmlns: 'urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2',
+      'xmlns:cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
+      'xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
+      'xmlns:ext': 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2',
+      'xmlns:ds': 'http://www.w3.org/2000/09/xmldsig#',
+      'xmlns:sac': 'urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1',
     };
   }
 
   build(despatch) {
     const root = create({ version: '1.0', encoding: 'UTF-8' })
-      .ele('DespatchAdvice', { xmlns: this.ns[''] })
+      .ele('DespatchAdvice', this.ns)
         .ele('ext:UBLExtensions')
           .ele('ext:UBLExtension')
             .ele('ext:ExtensionContent')
-              .ele('ds:Signature', { Id: 'signatureMT' })
-                // Se completa después con la firma
+            .up()
+          .up()
+          .ele('ext:UBLExtension')
+            .ele('ext:ExtensionContent')
+              .ele('sac:AdditionalInformation', {
+                'xmlns:sac': 'urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1',
+              })
+                .ele('sac:AdditionalProperty')
+                  .ele('cbc:Name').txt('1004').up()
+                  .ele('cbc:Value').txt(String(despatch.company.ruc)).up()
+                .up()
               .up()
             .up()
           .up()
-        .up()
-        .ele('ext:UBLExtensions')
-        .ele('ext:UBLExtension')
-          .ele('ext:ExtensionContent')
-            .ele('sac:AdditionalInformation', { xmlns: 'sac' : 'urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1' })
-              .ele('sac:AdditionalProperty')
-                .ele('cbc:Name').txt('1004').up()
-                .ele('cbc:Value').txt(String(despatch.company.ruc)).up()
-              .up()
-            .up()
-          .up()
-        .up()
-        .up()
-      .up();
+        .up();
 
     this._addBasicComponents(root, despatch);
     this._addSignature(root, despatch.company);
@@ -56,7 +54,7 @@ class XmlBuilder {
       .ele('cbc:DespatchAdviceTypeCode').txt('09').up();
 
     if (despatch.observacion) {
-      root.ele('cbc:Note').cdata(despatch.observacion).up();
+      root.ele('cbc:Note').dat(despatch.observacion).up();
     }
 
     // Documentos adicionales relacionados
@@ -85,7 +83,7 @@ class XmlBuilder {
     partyId.ele('cbc:ID', { schemeID: '6' }).txt(company.ruc).up();
 
     const partyName = signatory.ele('cac:PartyName');
-    partyName.ele('cbc:Name').cdata(company.razonSocial).up();
+    partyName.ele('cbc:Name').dat(company.razonSocial).up();
 
     const attachment = sig.ele('cac:DigitalSignatureAttachment');
     const extRef = attachment.ele('cac:ExternalReference');
@@ -94,36 +92,38 @@ class XmlBuilder {
 
   _addSupplierParty(root, company) {
     const party = root.ele('cac:DespatchSupplierParty').ele('cac:Party');
-    const partyId = party.ele('cac:PartyIdentification');
-    partyId.ele('cbc:ID', { schemeID: '6' }).txt(company.ruc).up();
+    party.ele('cac:PartyIdentification')
+      .ele('cbc:ID', {
+        schemeID: '6',
+        schemeName: 'Documento de Identidad',
+        schemeAgencyName: 'PE:SUNAT',
+        schemeURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06',
+      }).txt(company.ruc).up()
+      .up();
 
-    const partyName = party.ele('cac:PartyName');
-    partyName.ele('cbc:Name').cdata(company.razonSocial).up();
-
-    const taxScheme = party.ele('cac:PartyTaxScheme');
-    taxScheme.ele('cbc:CompanyID', { schemeID: '6' }).txt(company.ruc).up();
-    const ts = taxScheme.ele('cac:TaxScheme');
-    ts.ele('cbc:ID').txt('PDT').up();
-    ts.up();
-    taxScheme.up();
+    const legal = party.ele('cac:PartyLegalEntity');
+    legal.ele('cbc:RegistrationName').dat(company.razonSocial).up();
+    legal.up();
     party.up();
   }
 
   _addDeliveryCustomerParty(root, client) {
     if (!client) return;
     const party = root.ele('cac:DeliveryCustomerParty').ele('cac:Party');
-    const partyId = party.ele('cac:PartyIdentification');
-    partyId.ele('cbc:ID', { schemeID: client.tipoDoc }).txt(client.numDoc).up();
+    party.ele('cac:PartyIdentification')
+      .ele('cbc:ID', {
+        schemeID: client.tipoDoc,
+        schemeName: 'Documento de Identidad',
+        schemeAgencyName: 'PE:SUNAT',
+        schemeURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06',
+      }).txt(client.numDoc).up()
+      .up();
 
-    const partyName = party.ele('cac:PartyName');
-    partyName.ele('cbc:Name').cdata(client.rznSocial).up();
-
-    const taxScheme = party.ele('cac:PartyTaxScheme');
-    taxScheme.ele('cbc:CompanyID', { schemeID: client.tipoDoc }).txt(client.numDoc).up();
-    const ts = taxScheme.ele('cac:TaxScheme');
-    ts.ele('cbc:ID').txt('PDT').up();
-    ts.up();
-    taxScheme.up();
+    const legal = party.ele('cac:PartyLegalEntity');
+    if (client.rznSocial) {
+      legal.ele('cbc:RegistrationName').dat(client.rznSocial).up();
+    }
+    legal.up();
     party.up();
   }
 
@@ -131,17 +131,14 @@ class XmlBuilder {
     const ship = root.ele('cac:Shipment');
 
     ship.ele('cbc:ID').txt('SUNAT_Envio').up();
-    ship.ele('cbc:HandlingCode').txt(shipment.codTraslado).up();
-    ship.ele('cbc:HandlingInstructions').txt(shipment.desTraslado).up();
-    ship.ele('cbc:GrossWeightMeasure', { unitCode: shipment.undPesoTotal })
-      .txt(String(shipment.pesoTotal)).up();
-    ship.ele('cbc:TotalTransportHandlingUnitQuantity')
-      .txt(String(shipment.numBultos)).up();
-    ship.ele('cbc:TransportModeCode').txt(shipment.modTraslado).up();
+    ship.ele('cbc:HandlingCode', {
+      listAgencyName: 'PE:SUNAT',
+      listName: 'Motivo de traslado',
+      listURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20',
+    }).txt(shipment.codTraslado).up();
 
-    // Indicadores
-    for (const ind of shipment.indicadores) {
-      ship.ele('cbc:SpecialInstructions').txt(ind).up();
+    if (shipment.desTraslado) {
+      ship.ele('cbc:HandlingInstructions').txt(shipment.desTraslado).up();
     }
 
     // Sustento de peso (si hay diferencia)
@@ -149,28 +146,93 @@ class XmlBuilder {
       ship.ele('cbc:Information').txt(shipment.sustentoPeso).up();
     }
 
+    ship.ele('cbc:GrossWeightMeasure', { unitCode: shipment.undPesoTotal })
+      .txt(String(shipment.pesoTotal)).up();
+
     // Peso neto items
     if (shipment.pesoItems != null) {
-      ship.ele('cbc:NetWeightMeasure', { unitCode: shipment.undPesoTotal })
+      ship.ele('cbc:NetWeightMeasure', { unitCode: 'KGM' })
         .txt(String(shipment.pesoItems)).up();
     }
 
+    if (Number(shipment.numBultos) > 0) {
+      ship.ele('cbc:TotalTransportHandlingUnitQuantity')
+        .txt(String(shipment.numBultos)).up();
+    }
+
+    // Indicadores
+    for (const ind of shipment.indicadores || []) {
+      ship.ele('cbc:SpecialInstructions').txt(ind).up();
+    }
+
+    // Etapa de transporte (modalidad, tránsito, transportista y choferes)
+    const stage = ship.ele('cac:ShipmentStage');
+    stage.ele('cbc:TransportModeCode', {
+      listName: 'Modalidad de traslado',
+      listAgencyName: 'PE:SUNAT',
+      listURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo18',
+    }).txt(shipment.modTraslado).up();
+
     // Período de tránsito
-    const transit = ship.ele('cac:TransitPeriod');
-    transit.ele('cbc:StartDate').txt(this._formatDate(shipment.fecTraslado)).up();
-    transit.up();
+    if (shipment.fecTraslado) {
+      const transit = stage.ele('cac:TransitPeriod');
+      transit.ele('cbc:StartDate').txt(this._formatDate(shipment.fecTraslado)).up();
+      transit.up();
+    }
 
-    // Transportista
-    this._addCarrierParty(ship, shipment.transportista);
+    // Transportista: solo transporte público (regla 3347)
+    if (shipment.modTraslado === '01' && shipment.transportista) {
+      this._addCarrierParty(stage, shipment.transportista);
+    }
 
-    // Punto de partida
-    this._addDespatchAddress(ship, shipment.partida);
+    // Fecha de entrega de bienes al transportista: obligatoria SOLO en
+    // transporte público (reglas 3617/3618/3619 vigentes desde 01-06-2026).
+    if (shipment.modTraslado === '01' && shipment.fecEntregaBienes) {
+      const loadingEvent = stage.ele('cac:LoadingTransportEvent');
+      loadingEvent.ele('cbc:OccurrenceDate').txt(this._formatDate(shipment.fecEntregaBienes)).up();
+      loadingEvent.up();
+    }
 
-    // Punto de llegada
-    this._addDeliveryAddress(ship, shipment.llegada);
+    // Choferes: SOLO en transporte privado (regla 3354, en público van con el
+    // transportista). Con el indicador M1L (vehículo menor categoría L/M1) tampoco.
+    if (shipment.modTraslado !== '01' && !this._esVehiculoMenor(shipment)) {
+      for (const chofer of shipment.choferes || []) {
+        const driver = stage.ele('cac:DriverPerson');
+        driver.ele('cbc:ID', {
+          schemeID: chofer.tipoDoc,
+          schemeName: 'Documento de Identidad',
+          schemeAgencyName: 'PE:SUNAT',
+          schemeURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06',
+        }).txt(chofer.nroDoc).up();
+        if (chofer.nombres) {
+          driver.ele('cbc:FirstName').txt(chofer.nombres).up();
+        }
+        if (chofer.apellidos) {
+          driver.ele('cbc:FamilyName').txt(chofer.apellidos).up();
+        }
+        driver.ele('cbc:JobTitle').txt(chofer.tipo).up();
 
-    // TransportHandlingUnit (vehículos, contenedores, choferes)
-    this._addTransportHandlingUnit(ship, shipment);
+        const idDoc = driver.ele('cac:IdentityDocumentReference');
+        idDoc.ele('cbc:ID').txt(chofer.licencia).up();
+        idDoc.up();
+
+        driver.up();
+      }
+    }
+    stage.up();
+
+    // Entrega: llegada (DeliveryAddress) + partida (Despatch/DespatchAddress)
+    const delivery = ship.ele('cac:Delivery');
+    this._addAddress(delivery, 'cac:DeliveryAddress', shipment.llegada);
+    if (shipment.partida) {
+      const despatch = delivery.ele('cac:Despatch');
+      this._addAddress(despatch, 'cac:DespatchAddress', shipment.partida);
+      despatch.up();
+    }
+    delivery.up();
+
+    // TransportHandlingUnit (precintos y vehículo con remolques)
+    this._addTransportHandlingUnits(ship, shipment);
 
     // Puerto / Aeropuerto
     this._addPortLocation(ship, shipment.puerto, shipment.aeropuerto);
@@ -181,107 +243,112 @@ class XmlBuilder {
   _addCarrierParty(parent, transportist) {
     if (!transportist) return;
     const carrier = parent.ele('cac:CarrierParty');
-    const party = carrier.ele('cac:Party');
+    carrier.ele('cac:PartyIdentification')
+      .ele('cbc:ID', { schemeID: transportist.tipoDoc })
+      .txt(transportist.numDoc).up()
+      .up();
 
-    const partyId = party.ele('cac:PartyIdentification');
-    partyId.ele('cbc:ID', { schemeID: transportist.tipoDoc }).txt(transportist.numDoc).up();
-
-    const partyName = party.ele('cac:PartyName');
-    partyName.ele('cbc:Name').cdata(transportist.rznSocial).up();
-
-    const taxScheme = party.ele('cac:PartyTaxScheme');
-    taxScheme.ele('cbc:CompanyID', { schemeID: transportist.tipoDoc }).txt(transportist.numDoc).up();
-    const ts = taxScheme.ele('cac:TaxScheme');
-    ts.ele('cbc:ID').txt('PDT').up();
-    ts.up();
-    taxScheme.up();
-    party.up();
-
-    // Número MTC
-    if (transportist.nroMtc) {
-      carrier.ele('cbc:CompanyID').txt(transportist.nroMtc).up();
+    const legal = carrier.ele('cac:PartyLegalEntity');
+    if (transportist.rznSocial) {
+      legal.ele('cbc:RegistrationName').dat(transportist.rznSocial).up();
     }
-
+    if (transportist.nroMtc) {
+      legal.ele('cbc:CompanyID').txt(transportist.nroMtc).up();
+    }
+    legal.up();
     carrier.up();
   }
 
-  _addDespatchAddress(parent, direction) {
+  _addAddress(parent, tag, direction) {
     if (!direction) return;
-    const despatch = parent.ele('cac:Despatch');
-    const addr = despatch.ele('cac:DespatchAddress');
-    addr.ele('cbc:ID', { schemeName: 'Ubigeos' }).txt(direction.ubigueo).up();
+    const addr = parent.ele(tag);
+    addr.ele('cbc:ID', { schemeAgencyName: 'PE:INEI', schemeName: 'Ubigeos' })
+      .txt(direction.ubigueo).up();
 
-    const line = addr.ele('cac:AddressLine');
-    line.ele('cbc:Line').txt(direction.direccion).up();
-    line.up();
-
-    addr.ele('cbc:AddressTypeCode', { listID: direction.ruc })
-      .txt(direction.codLocal || '0000').up();
-    addr.up();
-    despatch.up();
-  }
-
-  _addDeliveryAddress(parent, direction) {
-    if (!direction) return;
-    const delivery = parent.ele('cac:Delivery');
-    const addr = delivery.ele('cac:DeliveryAddress');
-    addr.ele('cbc:ID', { schemeName: 'Ubigeos' }).txt(direction.ubigueo).up();
-
-    const line = addr.ele('cac:AddressLine');
-    line.ele('cbc:Line').txt(direction.direccion).up();
-    line.up();
-
-    addr.ele('cbc:AddressTypeCode', { listID: direction.ruc })
-      .txt(direction.codLocal || '0000').up();
-    addr.up();
-    delivery.up();
-  }
-
-  _addTransportHandlingUnit(parent, shipment) {
-    const thu = parent.ele('cac:TransportHandlingUnit');
-
-    // Vehículos secundarios
-    if (shipment.vehiculo && shipment.vehiculo.secundarios) {
-      for (const sec of shipment.vehiculo.secundarios) {
-        const attached = thu.ele('cac:AttachedTransportEquipment');
-        const equip = attached.ele('cac:TransportEquipment');
-        equip.ele('cbc:ID').txt(sec.placa).up();
-        equip.up();
-        attached.up();
-      }
+    // Establecimiento anexo: listID exige RUC válido de 11 dígitos (regla 3409).
+    // Con DNI u otro documento se omite el nodo.
+    if (direction.codLocal && /^\d{11}$/.test(direction.ruc || '')) {
+      addr.ele('cbc:AddressTypeCode', { listID: direction.ruc })
+        .txt(direction.codLocal).up();
     }
 
-    // Sellos de contenedor
-    for (const sello of shipment.contenedores) {
+    const line = addr.ele('cac:AddressLine');
+    line.ele('cbc:Line').txt(direction.direccion).up();
+    line.up();
+    addr.up();
+  }
+
+  // Vehículo menor categoría L/M1: SUNAT permite omitir placa y conductor en
+  // transporte privado si se envía el indicador especial (R-123-2022/SUNAT).
+  _esVehiculoMenor(shipment) {
+    return (shipment.indicadores || []).includes('SUNAT_Envio_IndicadorTrasladoVehiculoM1L');
+  }
+
+  _addTransportHandlingUnits(parent, shipment) {
+    // Precintos / contenedores
+    (shipment.contenedores || []).forEach((sello, i) => {
+      const thu = parent.ele('cac:TransportHandlingUnit');
       const pkg = thu.ele('cac:Package');
+      pkg.ele('cbc:ID').txt(String(i + 1)).up();
       pkg.ele('cbc:TraceID').txt(sello).up();
       pkg.up();
-    }
+      thu.up();
+    });
 
-    thu.up();
+    // Vehículo principal (TransportEquipment): SOLO en transporte privado.
+    // En público (regla 3354) no se consigna: pertenece al transportista.
+    // Con el indicador M1L se omite también (excepción vehículo menor).
+    if (shipment.modTraslado === '01' || this._esVehiculoMenor(shipment) || !shipment.vehiculo) return;
+    const vehiculo = shipment.vehiculo;
 
-    // Vehículo principal (ApplicableTransportMeans)
-    if (shipment.vehiculo) {
-      const means = parent.ele('cac:ApplicableTransportMeans');
+    const thu = parent.ele('cac:TransportHandlingUnit');
+    const equip = thu.ele('cac:TransportEquipment');
+    equip.ele('cbc:ID').txt(vehiculo.placa).up();
+
+    if (vehiculo.nroCirculacion) {
+      const means = equip.ele('cac:ApplicableTransportMeans');
       means.ele('cbc:RegistrationNationalityID')
-        .txt(shipment.vehiculo.placa).up();
+        .txt(vehiculo.nroCirculacion).up();
       means.up();
     }
 
-    // Choferes
-    for (const chofer of shipment.choferes) {
-      const driver = parent.ele('cac:DriverPerson');
-      driver.ele('cbc:ID', { schemeID: chofer.tipoDoc }).txt(chofer.nroDoc).up();
-      driver.ele('cbc:FirstName').txt(chofer.nombres).up();
-      driver.ele('cbc:FamilyName').txt(chofer.apellidos).up();
-      driver.ele('cbc:JobTitle').txt(chofer.tipo).up();
+    // Vehículos secundarios (remolques)
+    for (const sec of vehiculo.secundarios || []) {
+      const attached = equip.ele('cac:AttachedTransportEquipment');
+      attached.ele('cbc:ID').txt(sec.placa).up();
 
-      const idDoc = driver.ele('cac:IdentityDocumentReference');
-      idDoc.ele('cbc:ID').txt(chofer.licencia).up();
-      idDoc.up();
+      if (sec.nroCirculacion) {
+        const secMeans = attached.ele('cac:ApplicableTransportMeans');
+        secMeans.ele('cbc:RegistrationNationalityID')
+          .txt(sec.nroCirculacion).up();
+        secMeans.up();
+      }
 
-      driver.up();
+      if (sec.nroAutorizacion) {
+        const docRef = attached.ele('cac:ShipmentDocumentReference');
+        docRef.ele('cbc:ID', {
+          schemeID: sec.codEmisor || '',
+          schemeName: 'Entidad Autorizadora',
+          schemeAgencyName: 'PE:SUNAT',
+        }).txt(sec.nroAutorizacion).up();
+        docRef.up();
+      }
+
+      attached.up();
     }
+
+    if (vehiculo.nroAutorizacion) {
+      const docRef = equip.ele('cac:ShipmentDocumentReference');
+      docRef.ele('cbc:ID', {
+        schemeID: vehiculo.codEmisor || '',
+        schemeName: 'Entidad Autorizadora',
+        schemeAgencyName: 'PE:SUNAT',
+      }).txt(vehiculo.nroAutorizacion).up();
+      docRef.up();
+    }
+
+    equip.up();
+    thu.up();
   }
 
   _addPortLocation(parent, puerto, aeropuerto) {
@@ -290,11 +357,18 @@ class XmlBuilder {
 
     const locationCode = puerto ? '1' : '2';
     const schemeName = puerto ? 'Puertos' : 'Aeropuertos';
+    const schemeURI = puerto
+      ? 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo63'
+      : 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo64';
 
     const loc = parent.ele('cac:FirstArrivalPortLocation');
-    loc.ele('cbc:ID', { schemeName }).txt(port.codigo).up();
-    loc.ele('cbc:Name').txt(port.nombre).up();
+    loc.ele('cbc:ID', {
+      schemeAgencyName: 'PE:SUNAT',
+      schemeName,
+      schemeURI,
+    }).txt(port.codigo).up();
     loc.ele('cbc:LocationTypeCode').txt(locationCode).up();
+    loc.ele('cbc:Name').txt(port.nombre).up();
     loc.up();
   }
 
@@ -306,24 +380,36 @@ class XmlBuilder {
       line.ele('cbc:ID').txt(String(i + 1)).up();
       line.ele('cbc:DeliveredQuantity', { unitCode: item.unidad })
         .txt(String(item.cantidad)).up();
-      line.ele('cbc:Description').cdata(item.descripcion).up();
+
+      const orderRef = line.ele('cac:OrderLineReference');
+      orderRef.ele('cbc:LineID').txt(String(i + 1)).up();
+      orderRef.up();
 
       const itemNode = line.ele('cac:Item');
+
+      if (item.descripcion) {
+        itemNode.ele('cbc:Description').dat(item.descripcion).up();
+      }
+
       const sellersId = itemNode.ele('cac:SellersItemIdentification');
       sellersId.ele('cbc:ID').txt(item.codigo).up();
       sellersId.up();
 
       if (item.codProdSunat) {
         const cls = itemNode.ele('cac:CommodityClassification');
-        cls.ele('cbc:ItemClassificationCode').txt(item.codProdSunat).up();
+        cls.ele('cbc:ItemClassificationCode', {
+          listID: 'UNSPSC',
+          listAgencyName: 'GS1 US',
+          listName: 'Item Classification',
+        }).txt(item.codProdSunat).up();
         cls.up();
       }
 
       // Atributos adicionales
       for (const attr of item.atributos) {
         const prop = itemNode.ele('cac:AdditionalItemProperty');
-        prop.ele('cbc:NameCode').txt(attr.code).up();
         prop.ele('cbc:Name').txt(attr.name).up();
+        prop.ele('cbc:NameCode').txt(attr.code).up();
         if (attr.value) {
           prop.ele('cbc:Value').txt(attr.value).up();
         }
@@ -331,30 +417,35 @@ class XmlBuilder {
       }
 
       itemNode.up();
-
-      const orderRef = line.ele('cac:OrderLineReference');
-      orderRef.ele('cbc:LineID').txt(String(i + 1)).up();
-      orderRef.up();
-
       line.up();
     }
   }
 
+  // mssql (tedious) devuelve los datetime "naive" como instantes UTC,
+  // por lo que los campos getUTC* reproducen el valor original de la BD.
   _formatDate(date) {
     if (!date) return '';
+    if (typeof date === 'string') {
+      return date.slice(0, 10);
+    }
     const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
   _formatTime(date) {
     if (!date) return '';
+    if (typeof date === 'string') {
+      const t = date.match(/T(\d{2}:\d{2}:\d{2})/);
+      if (t) return t[1];
+      return date.slice(11, 19) || '00:00:00';
+    }
     const d = new Date(date);
-    const hours = String(d.getHours()).padStart(2, '0');
-    const mins = String(d.getMinutes()).padStart(2, '0');
-    const secs = String(d.getSeconds()).padStart(2, '0');
+    const hours = String(d.getUTCHours()).padStart(2, '0');
+    const mins = String(d.getUTCMinutes()).padStart(2, '0');
+    const secs = String(d.getUTCSeconds()).padStart(2, '0');
     return `${hours}:${mins}:${secs}`;
   }
 }

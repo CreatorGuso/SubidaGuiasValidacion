@@ -9,14 +9,17 @@ class SunatAuthService {
   }
 
   /**
-   * Obtiene token OAuth2 de SUNAT
+   * Obtiene token OAuth2 de SUNAT (flujo password grant)
+   * POST https://api-seguridad.sunat.gob.pe/v1/clientessol/{client_id}/oauth2/token/
    */
   async getToken(clientId, clientSecret) {
     const id = clientId || config.sunat.clientId;
     const secret = clientSecret || config.sunat.clientSecret;
+    const username = `${config.sunat.ruc}${config.sunat.usuarioSol}`;
+    const password = config.sunat.claveSol;
 
-    if (!id || !secret) {
-      throw new Error('Faltan credenciales SUNAT OAuth2 (client_id, client_secret)');
+    if (!id || !secret || !username || !password) {
+      throw new Error('Faltan credenciales SUNAT (client_id, client_secret, usuario_sol, clave_sol)');
     }
 
     // Verificar si el token sigue vigente
@@ -26,12 +29,15 @@ class SunatAuthService {
 
     try {
       const params = new URLSearchParams();
+      params.append('grant_type', 'password');
+      params.append('scope', config.sunat.scope);
       params.append('client_id', id);
       params.append('client_secret', secret);
-      params.append('grant_type', 'client_credentials');
+      params.append('username', username);
+      params.append('password', password);
 
       const response = await axios.post(
-        `${config.sunat.apiBase}/v1/security/oauth/auth`,
+        `${config.sunat.seguridadBase}/clientessol/${id}/oauth2/token/`,
         params.toString(),
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
@@ -43,8 +49,12 @@ class SunatAuthService {
       logger.info('Token SUNAT obtenido correctamente');
       return this.token;
     } catch (error) {
+      if (error.response) {
+        logger.error(`Error al obtener token SUNAT [${error.response.status}]: ${JSON.stringify(error.response.data)}`);
+        throw new Error(`Error SUNAT Auth ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+      }
       logger.error('Error al obtener token SUNAT:', error.message);
-      throw new Error(`Error SUNAT Auth: ${error.message}`);
+      throw error;
     }
   }
 }

@@ -18,10 +18,10 @@ class ZipService {
       compressionOptions: { level: 6 },
     });
 
-    // Calcular SHA-256 del ZIP
+    // Calcular SHA-256 del ZIP (hex, formato esperado por SUNAT GRE)
     const md = forge.md.sha256.create();
     md.update(forge.util.binary.raw.encode(zipBuffer));
-    const hash = forge.util.encode64(md.digest().getBytes());
+    const hash = md.digest().toHex();
 
     return { zip: zipBuffer, hash };
   }

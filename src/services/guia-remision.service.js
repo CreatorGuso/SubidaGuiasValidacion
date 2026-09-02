@@ -46,7 +46,7 @@ class GuiaRemisionService {
       await documentoRepository.actualizarEnvio(
         idDocumento,
         3, // estado: en proceso
-        '',
+        98, // código SUNAT: en proceso
         resultado.ticket,
         ''
       );
@@ -65,7 +65,7 @@ class GuiaRemisionService {
       await documentoRepository.actualizarEnvio(
         idDocumento,
         0, // estado: error
-        error.message,
+        99,
         '',
         '99'
       );
@@ -80,10 +80,9 @@ class GuiaRemisionService {
   /**
    * Consultar estado de una GRE
    * @param {string} ticket
-   * @param {Object} empresa
    */
-  async consultarEstado(ticket, empresa) {
-    return await sunatGreService.consultarEstado(ticket, empresa);
+  async consultarEstado(ticket) {
+    return await sunatGreService.consultarEstado(ticket);
   }
 }
 

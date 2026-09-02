@@ -11,37 +11,31 @@ class SunatGreService {
 
   /**
    * Envía Guía de Remisión a SUNAT vía REST API
+   * POST https://api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/{RUC}-09-{SERIE}-{NRO}
    * @param {string} xmlFirmado - XML firmado
-   * @param {string} nombreArchivo - Nombre del archivo (sin extensión)
-   * @param {Object} empresa - Datos de la empresa
+   * @param {string} nombreArchivo - Nombre del archivo sin extensión (RUC-TIPO-SERIE-NRO)
    * @returns {Promise<{ ticket: string, success: boolean }>}
    */
-  async enviar(xmlFirmado, nombreArchivo, empresa) {
+  async enviar(xmlFirmado, nombreArchivo) {
+    // Comprimir XML a ZIP
+    const { zip, hash } = await this.zipService.compress(xmlFirmado, nombreArchivo);
+    const zipBase64 = zip.toString('base64');
+
+    const token = await sunatAuth.getToken();
+
+    const body = {
+      archivo: {
+        nomArchivo: `${nombreArchivo}.zip`,
+        arcGreZip: zipBase64,
+        hashZip: hash,
+      },
+    };
+
+    logger.info(`Enviando GRE a SUNAT: ${nombreArchivo}`);
+
     try {
-      // Obtener token
-      const token = await sunatAuth.getToken(
-        empresa.clientId,
-        empresa.clientSecret
-      );
-
-      // Comprimir XML a ZIP
-      const { zip, hash } = await this.zipService.compress(xmlFirmado, nombreArchivo);
-      const zipBase64 = zip.toString('base64');
-
-      // Preparar body
-      const body = {
-        tipoCpe: '09',
-        serieCorrelativo: nombreArchivo.split('-').slice(1).join('-'),
-        fechaEmision: this._formatDate(new Date()),
-        ruc: empresa.ruc,
-        coditoHash: hash,
-        archivo: zipBase64,
-      };
-
-      logger.info(`Enviando GRE a SUNAT: ${body.serieCorrelativo}`);
-
       const response = await axios.post(
-        `${config.sunat.apiBase}/v1/cpe`,
+        `${config.sunat.apiBase}/contribuyente/gem/comprobantes/${nombreArchivo}`,
         body,
         {
           headers: {
@@ -53,15 +47,15 @@ class SunatGreService {
         }
       );
 
-      logger.info(`GRE enviado. Ticket: ${response.data.ticket}`);
+      logger.info(`GRE enviada. Ticket: ${response.data.numTicket}`);
 
       return {
-        ticket: response.data.ticket,
+        ticket: response.data.numTicket,
         success: true,
       };
     } catch (error) {
       if (error.response) {
-        logger.error('Error SUNAT:', JSON.stringify(error.response.data));
+        logger.error(`Error SUNAT [${error.response.status}]: ${JSON.stringify(error.response.data)}`);
         throw new Error(
           `SUNAT ${error.response.status}: ${JSON.stringify(error.response.data)}`
         );
@@ -72,48 +66,46 @@ class SunatGreService {
 
   /**
    * Consulta estado de una GRE enviada
+   * GET https://api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/envios/{numTicket}
+   * codRespuesta: "98" en proceso, "99" con error, "0" aceptado
    * @param {string} ticket
-   * @param {Object} empresa
    * @returns {Promise<Object>}
    */
-  async consultarEstado(ticket, empresa) {
-    try {
-      const token = await sunatAuth.getToken(
-        empresa.clientId,
-        empresa.clientSecret
-      );
+  async consultarEstado(ticket) {
+    const token = await sunatAuth.getToken();
 
-      const response = await axios.get(
-        `${config.sunat.apiBase}/v1/cpe/${ticket}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
-          timeout: 30000,
-        }
-      );
+    const response = await axios.get(
+      `${config.sunat.apiBase}/contribuyente/gem/comprobantes/envios/${ticket}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
 
-      const data = response.data;
+    const data = response.data;
 
-      return {
-        estado: data.codRespuesta || data.estado,
-        ticket,
-        cdr: data.cdr || null,
-        descripcion: data.descripcion || '',
-      };
-    } catch (error) {
-      logger.error('Error consultando estado GRE:', error.message);
-      throw error;
+    const resultado = {
+      estado: data.codRespuesta,
+      descripcion:
+        data.codRespuesta === '0'
+          ? 'Aceptado por SUNAT'
+          : data.codRespuesta === '98'
+            ? 'En proceso'
+            : (data.error && data.error.desError) || 'Envío con error',
+      numError: (data.error && data.error.numError) || null,
+      cdr: data.arcCdr || null,
+      indCdrGenerado: data.indCdrGenerado || null,
+      ticket,
+    };
+
+    if (data.codRespuesta === '99') {
+      logger.error(`GRE rechazada. Ticket ${ticket}: ${resultado.numError} - ${resultado.descripcion}`);
     }
-  }
 
-  _formatDate(date) {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return resultado;
   }
 }
 
