@@ -1,4 +1,15 @@
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Raíz del proyecto (dos niveles arriba de src/config). Todo se resuelve
+// desde aquí para que el proceso sea independiente del directorio desde el
+// que se ejecute node (src\, la raíz, un .bat, el programador de tareas...).
+const RAIZ = path.resolve(__dirname, '..', '..');
+
+dotenv.config({ path: path.join(RAIZ, '.env') });
+
+// Convierte una ruta relativa del .env en absoluta respecto de la raíz.
+const _dir = (valor, porDefecto) => path.resolve(RAIZ, valor || porDefecto);
 
 module.exports = {
   // BD central (admin): contiene Conexiones y spPyOValidaGuia
@@ -26,13 +37,13 @@ module.exports = {
   },
 
   certificates: {
-    dir: process.env.CERTIFICATES_DIR || './certificates',
+    dir: _dir(process.env.CERTIFICATES_DIR, './certificates'),
   },
 
   // Reporte de guías pendientes con su motivo de fallo. Se sobrescribe en
   // cada ejecución, así que solo contiene lo pendiente del día.
   reporte: {
-    dir: process.env.REPORTE_DIR || './reportes',
+    dir: _dir(process.env.REPORTE_DIR, './reportes'),
     archivo: process.env.REPORTE_ARCHIVO || 'pendientes.json',
   },
 };
