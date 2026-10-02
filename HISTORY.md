@@ -392,3 +392,251 @@ node -e "const {getConnection}=require('./src/database/connection');
   Si en realidad sí hay conductor/vehículo distinto a M1, completar `nrochofer` (brevete real, 9-10
   alfanuméricos) y `dnichofer`/`chofer` en el ERP.
 
+---
+
+## DESCARTADO — QR de la guía desde el CDR (2026-09-16)
+
+> **Actualización 2026-10-02:** el QR se mudó a otro proyecto; este proceso solo se ocupa de la **subida**
+> de la guía. Todo el código de CDR/QR se eliminó del repositorio (ver la sesión del 2026-10-02).
+> Se conserva el hallazgo como documentación de referencia.
+
+### Contexto / hallazgo (documentación en `../greenter`)
+
+Se revisó la doc de greenter y se confirmó que el CDR de una guía de remisión **sí contiene la URL del QR**:
+
+1. El CDR es un XML `ApplicationResponse` (dentro del zip que SUNAT devuelve en `arcCdr`). Trae la URL en
+   `cac:DocumentResponse/cac:DocumentReference/cbc:DocumentDescription`:
+   `https://e-factura.sunat.gob.pe/v1/contribuyente/gre/comprobantes/descargaqr?hashqr=...`
+   - Ejemplo real: `greenter/packages/ws/tests/Resources/R-20000000001-09-T001-1.xml:47`
+2. Greenter la extrae con `DomCdrReader::getReference()`
+   (`greenter/packages/ws/src/Ws/Reader/DomCdrReader.php:58,65`) y lo valida en
+   `DomCdrReaderTest::testNuevaGuiaCdr` (`assertStringStartsWith('https://e-factura.sunat.gob.pe/', $cdr->getReference())`).
+3. En el PDF de despacho esa URL se renderiza como QR:
+   `greenter/packages/report/src/Report/Templates/despatch.html.twig:210` → `qrUrl(params.system.qr)`.
+4. `Greenter\Model\Response\CdrResponse::getReference()` guarda ese valor
+   (`greenter/packages/core/src/Core/Model/Response/CdrResponse.php:126`).
+
+### Estado actual en greenter-api (Node)
+
+Hoy `GET /api/guias/estado/:ticket` NO expone la URL del QR:
+- `src/services/sunat-gre.service.js:99` devuelve solo `cdr: data.arcCdr` (ZIP en base64) e `indCdrGenerado`.
+- `public/index.html:416` descarga el CDR como `.zip` sin parsearlo.
+
+### Trabajo pendiente (cuando se retome)
+
+1. Descomprimir el ZIP del CDR (`src/services/zip.service.js` ya tiene `decompress`).
+2. Parsear el `ApplicationResponse` y extraer `cac:DocumentResponse/cac:DocumentReference/cbc:DocumentDescription`
+   (la URL `descargaqr?hashqr=...`).
+3. Exponerla en la respuesta de `consultarEstado` (p. ej. `qrUrl` / `reference`).
+4. **Guardar la URL del QR en BD** (`documentos_sve`):
+   - Confirmado que es factible: se obtiene y se persiste en `actualizarEnvio`
+     (`src/database/documento.repository.js:62`) aprovechando el mismo UPDATE que ya corre al aceptarse.
+   - **Requisito:** agregar una columna a `documentos_sve` (p. ej. `qr_url VarChar(255)`) — hoy el CDR/QR
+     nunca se guarda (solo se actualizan `estado`, `respuesta_sunat`, `id_sunat`, `fecha_sunat`, `coderror_sunat`).
+5. (Opcional) Generar/retornar el QR en la vista (`public/index.html`) con esa URL.
+
+
+---
+
+## Sesión 2026-10-02 — El proyecto deja de ser API: proceso batch por consola
+
+### Decisión del usuario
+
+Este proyecto **ya no es una API**. Se ejecuta como proceso por consola (`npm start` / `node src/server.js`),
+recorre las guías pendientes de todos los clientes, las sube a SUNAT y termina. El QR de la guía se
+gestiona en **otro proyecto**, así que se eliminó todo el código de CDR/QR.
+
+### Nueva arquitectura (multi-empresa)
+
+Antes había una sola BD (la del cliente en desarrollo) y credenciales SUNAT fijas en `.env`.
+Ahora todo se resuelve en cascada desde la **BD central `admin`**:
+
+```
+admin (sa)
+ ├─ exec spPyOValidaGuia            → ID, idEmpresa, idDocumento, Estado, DriveID
+ ├─ filtrar Estado = 1              → solo estas se validan/envían
+ ├─ agrupar por ID                  (= Conexiones.id)
+ └─ SELECT * FROM Conexiones WHERE id=@id
+        → NombreServer, NombreBD, usuario, clave   (abrir pool del ERP)
+             ├─ v_empresas        → ruc, usuariosol, clavesol, nomcertificadopfx, clacertificadopfx
+             ├─ tablas_empresas   → 700014 = client_id  |  700013 = client_secret
+             ├─ documentos_sve    → idempresa, idoficina, serie_doc, numero_doc
+             ├─ spMuestraComprobanteGuia(idempresa, idoficina, '030009', serie, nro) → detalle
+             └─ UPDATE documentos_sve → respuesta_sunat, id_sunat, fecha_sunat, coderror_sunat
+```
+
+### Datos verificados en producción (2026-10-02)
+
+- `spPyOValidaGuia` **no recibe parámetros**. Sus columnas: `ID` (int = `Conexiones.id`), `idEmpresa`,
+  `idDocumento`, `Estado` (int), `DriveID`. Devolvió 65 filas: 26 con `Estado = 1` en 5 conexiones
+  (11 Artika, 12 Camayo, 18 PuratosSur, 20 DUniversal, 30 KaiserCorp).
+- `tablas_empresas`: **`700014` = `client_id`** y **`700013` = `client_secret`** (confirmado en Artika,
+  Camayo, PuratosSur y KaiserCorp: los mismos valores que estaban en `.env` para Kaiser).
+- El SP de detalle es **`spMuestraComprobanteGuia(@idempresa, @idoficina, @idtipoguia, @serieguia, @nroguia)`**
+  (`@idtipoguia = '030009'`), **no** `spmuestracomprobanteguia` con iddocumento. Devuelve los 52 campos que el
+  mapper ya consumía. `spMuestraDetalleGuia` existe pero solo devuelve las líneas de producto (sin cabecera).
+- `documentos_sve.serie_doc` viene con relleno (`'T001 '`, varchar(5)) → se hace `TRIM` antes de invocar el SP.
+- Los documentos llegan con `estado='6'`, `validado=1`, `numero_envio=1`: el campo `estado` **lo administra
+  el ERP** y el proceso **no lo escribe** (decisión del usuario). Antes la API lo pisaba con 1/3/5/0.
+
+### Archivos
+
+| Archivo | Cambio |
+|---------|--------|
+| `.env` | BD central `admin` (sa). Fuera credenciales SUNAT, `PORT`, `RUTA_*`. Entra espera de consulta de ticket |
+| `src/config/index.js` | Solo BD admin, endpoints SUNAT fijos y certificados. Fuera `port`, `cdr`, `rutas` |
+| `src/database/connection.js` | Pool único de `admin` + `createErpPool()` / `closePool()` para los ERPs |
+| `src/database/admin.repository.js` | **Nuevo**: `getGuiasPendientes()` (spPyOValidaGuia) y `getConexion(id)` |
+| `src/database/erp.repository.js` | **Nuevo**: documento, detalle, empresa, OAuth y UPDATE (por pool, con `@input`) |
+| `src/database/{empresa,documento}.repository.js` | **Eliminados** (usaban el pool global) |
+| `src/services/proceso.service.js` | **Nuevo**: orquestador completo y resumen de la ejecución |
+| `src/services/guia-remision.service.js` | Recibe pool + credenciales; espera el estado final y registra la respuesta |
+| `src/services/sunat-auth.service.js` | Credenciales por empresa; cache de token por `clientId\|ruc\|usuarioSol` |
+| `src/services/sunat-gre.service.js` | Credenciales por empresa; `esperarEstado()` sondea el ticket hasta estado final |
+| `src/services/cdr.service.js` | **Eliminado** (QR) |
+| `src/server.js` | Ejecuta el proceso y cierra conexiones (sin Express) |
+| `src/{routes,controllers}/`, `public/` | **Eliminados** (capa HTTP) |
+| `src/xml/signer.js` | `_resolverPfx()`: si no existe `<nomcertificadopfx>` exacto, prueba con `.pfx`/`.p12` |
+| `package.json` | Fuera `express`, `cors`, `soap`. Entra `@xmldom/xmldom` como dependencia explícita |
+
+### Comportamiento
+
+1. `spPyOValidaGuia` → filtrar `Estado = 1` → agrupar por `ID`.
+2. Por conexión: leer `Conexiones`, abrir pool, cargar `v_empresas` + `tablas_empresas`.
+3. Por guía: `documentos_sve` → `spMuestraComprobanteGuia` → mapear → XML → firmar → enviar.
+4. **Siempre** se consulta el ticket hasta estado final (`codRespuesta` `0` o `99`, reintentando mientras sea `98`).
+5. Se escriben `respuesta_sunat`, `id_sunat`, `fecha_sunat`, `coderror_sunat`. **`estado` no se toca.**
+6. Se cierra el pool del ERP y se pasa a la siguiente conexión; al final se cierra `admin`.
+
+Un error en una guía no detiene el resto: se registra y se sigue. Al final se imprime un resumen.
+
+### Verificación (dry-run sin enviar a SUNAT)
+
+26 guías de 5 empresas: mapeo, XML y firma correctos en todas; `signer.verify()` da **firma válida**
+en las comprobadas. Dos incidencias encontradas en los datos (NO son bugs del código):
+
+1. **Conexión 20 (DUniversal)** — 12 guías abortadas por el fail-fast de licencia 2573: el ERP trae
+   `nrochofer='14648556'` (8 dígitos, parece el DNI `33394481`). Requiere corregir `nrochofer` en el ERP.
+2. **`cbc:AddressTypeCode` con el RUC del remitente** — el mapper fija `codLocal='0000'` en partida y
+   llegada, así que siempre se emite `listID=<RUC>`. Cuando el RUC de la dirección es el **mismo del emisor**
+   (p. ej. Camayo: llegada y partida con `listID="20604141431"`) SUNAT responde **3411**. El template
+   oficial lo hace opcional (`{% if envio.llegada.codLocal %}` en `despatch2022.xml.twig:151`), así que la
+   corrección es no emitirlo cuando el RUC coincide con el del emisor.
+3. **Transportista placeholder** — en Camayo (público `01`) el ERP trae RUC `99999999999` y nombre
+   `EL MISMO`: cumple el formato de 11 dígitos, pasa el chequeo del mapper y va a SUNAT, pero es un RUC
+   inexistente → rechazo **3348**. El N° MTC del transportista sigue sin estar disponible.
+
+### Política de errores: solo el código, nunca el `estado`
+
+Decisión del usuario: **una guía que falla por datos no se anula ni se rechaza desde este proceso.**
+El documento conserva el `estado` que ya tenía en el ERP para que allí lo **corrijan o lo anulen**, y
+se vuelva a poner en `Estado = 1` cuando corresponda reenviarlo.
+
+Lo que se escribe en `documentos_sve` ante un fallo:
+
+| Campo | Aceptado | Rechazado por SUNAT | Fallo de validación local |
+|-------|----------|---------------------|---------------------------|
+| `estado` | **no se toca** | **no se toca** | **no se toca** |
+| `respuesta_sunat` | `0` | `99` | `99` |
+| `id_sunat` | ticket | ticket | conserva el anterior (vacío = no sobrescribir) |
+| `fecha_sunat` | sí | sí | sí |
+| `coderror_sunat` | `''` | `numError` de SUNAT (p. ej. `3348`, `3411`) | código de la regla (p. ej. `2573`) |
+
+- Los errores de validación local se detectan **antes** de enviar (fail-fast del mapper), así que no se
+  quema ticket. El mapper ahora adjunta el código a la excepción (`error.codigo = '2573'`) y
+  `_registrarError()` lo persiste solo en `coderror_sunat`.
+- `actualizarEnvio` usa `id_sunat = ISNULL(NULLIF(@idSunat,''), id_sunat)` para no borrar un ticket previo.
+- No se escriben `validado`, `codigovalidacion` ni `numero_envio`: los administra el ERP.
+
+**Consecuencia:** el proceso se puede ejecutar cuantas veces se quiera sin riesgo de dejar documentos en un
+estado inconsistente. Los rechazos de SUNAT y los datos inválidos quedan visibles en `coderror_sunat` para
+que el ERP los corrija.
+
+### Fallos esperados en la primera corrida (2026-10-02)
+
+| Caso | Guías | Resultado |
+|------|-------|-----------|
+| Conexión 20 DUniversal — `nrochofer='14648556'` (8 díg.) | 12 | No se envía: `coderror_sunat='2573'`, `estado` intacto |
+| `cbc:AddressTypeCode` con el RUC del emisor (partida/llegada) | las de motivo 04 y destinos = emisor | SUNAT rechaza con `3411`, `estado` intacto |
+| Transportista `99999999999` / "EL MISMO" (Camayo, público) | 1 | SUNAT rechaza con `3348`, `estado` intacto |
+
+Ninguno de estos casos deja el documento en un estado inconsistente: solo se anota el código de error.
+
+---
+
+## 2026-10-02 — Primera corrida real (ejecución accidental)
+
+### Qué pasó
+
+Al validar los pools se ejecutó `node -e "require('./src/server.js')"`. Se constató que cargar el
+módulo **ejecuta** el proceso: no es importable sin arrancar el batch. Se enviaron **16 de 26** guías
+antes de que un error detuviera la corrida:
+
+- **Error**: `intos is not defined` en `src/services/sunat-gre.service.js` (`${intos}` en vez de `${intentos}`).
+- **Efecto**: el `catch` de `guia-remision.service.js` marcó las 16 guías con `respuesta_sunat = 99` y
+  `coderror_sunat = '99'`, sin ticket.
+- **Corrección**: se arregló el typo y se consultó cada ticket en la API de SUNAT para escribir el
+  resultado real en la BD.
+
+### Resultado real de los 16 envíos
+
+| Resultado | Guías | Detalle |
+|-----------|-------|---------|
+| Aceptadas | 8 | `respuesta_sunat = 0` |
+| Rechazadas `2108` | 4 | fecha fuera de ventana de presentación |
+| Rechazadas `3348` | 3 | RUC del transportista no existe (Camayo y 2 de DUniversal) |
+| Rechazadas `2569` | 1 | DNI del conductor |
+
+Las 10 restantes (las de DUniversal con licencia de 8 dígitos) nunca se enviaron: el mapper las frenó
+con `2573`.
+
+### Consecuencia: el ERP mueve `estado`, no el proceso
+
+`estado` se dejó siempre en `2`. Después, el ERP leyó `respuesta_sunat = 0` y **pasó él mismo** las 8
+guías aceptadas a `estado = '5'` con `validado = 1`. Se verificó en los 5 ERPs que la convención es:
+
+| `estado` | `respuesta_sunat` | `validado` | Significado |
+|----------|-------------------|------------|-------------|
+| `2` | 99 | 0 | pendiente de corregir (18 guías = exactamente lo que devuelve el SP) |
+| `5` | 0 / 98 | 1 | aceptado por SUNAT |
+| `6` | 0 / 98 / 99 | 1, 2, 7, 9, 15 | cerrado, histórico o anulado |
+
+**Esto confirma el diseño**: basta con escribir `respuesta_sunat` y `coderror_sunat`. Y confirma también
+que no hay riesgo de duplicados: al pasar a `estado = '5'`, el ERP sacó las guías aceptadas de
+`spPyOValidaGuia` (bajó de 26 a 18 filas con `Estado = 1`).
+
+### Reporte de pendientes
+
+Se agregó `reportes/pendientes.json`, generado al final de cada corrida y sobrescrito en cada ejecución
+(contiene solo lo pendiente del día). No se arma solo con lo fallado en la corrida: consulta cada ERP con
+`estado = '2' AND respuesta_sunat = 99` para no perder de vista lo que falló en días anteriores.
+
+```json
+{
+  "generado": "2026-10-02T19:20:25.170Z",
+  "total": 18,
+  "porBase": { "Artika": 3, "Camayo": 1, "PuratosSur": 2, "DUniversal": 12 },
+  "pendientes": [
+    {
+      "base": "Artika",
+      "ruc": "20228941612",
+      "empresa": "HELADOS ARTIKA S.R.L.",
+      "idDocumento": "264637491400",
+      "documento": "T001-00001106",
+      "fecha": "2026-09-28",
+      "estado": "2",
+      "codError": "2108",
+      "motivo": "Presentación fuera de fecha o con fecha/hora posterior a la de la consulta"
+    }
+  ]
+}
+```
+
+- `src/utils/motivos-error.js`: diccionario código → descripción en español.
+- `REPORTE_DIR` y `REPORTE_ARCHIVO` son configurables; `reportes/` está en `.gitignore`.
+
+### Lección sobre las pruebas de pools
+
+Para probar los pools hay que importarlos **por módulo** (`connection.js`), nunca `server.js`: este último
+arranca el batch al ser requerido. Las pruebas de pool sí son seguras y ya cubren admin + dos ERPs,
+conexión inválida, evento `error` y reconexión.

@@ -1,45 +1,22 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
 require('dotenv').config();
 
-const config = require('./config');
+const procesoService = require('./services/proceso.service');
 const logger = require('./utils/logger');
-const guiaRoutes = require('./routes/guia.routes');
 
-const app = express();
+/**
+ * Proceso por consola: recorre las guías pendientes de validación y las
+ * emite a SUNAT. Al terminar cierra todas las conexiones y sale solo
+ * (los pools se cierran en el servicio; no hay handles colgados).
+ */
+async function main() {
+  const resumen = await procesoService.ejecutar();
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+  if (resumen.error) {
+    process.exitCode = 1;
+  }
+}
 
-// Frontend (vista de guías)
-app.use(express.static(path.join(__dirname, '..', 'public')));
-
-// Routes
-app.use('/api/guias', guiaRoutes);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+main().catch((error) => {
+  logger.error(`Error no manejado: ${error.message}`);
+  process.exitCode = 1;
 });
-
-// Root -> vista
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-});
-
-// Error handler
-app.use((err, req, res, next) => {
-  logger.error('Error no manejado:', err.message);
-  res.status(500).json({ success: false, error: 'Error interno del servidor' });
-});
-
-// Start server
-const PORT = config.port;
-app.listen(PORT, () => {
-  logger.info(`Greenter API corriendo en puerto ${PORT}`);
-});
-
-module.exports = app;

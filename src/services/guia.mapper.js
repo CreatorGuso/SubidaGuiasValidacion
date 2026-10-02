@@ -145,12 +145,14 @@ class GuiaMapper {
           `Licencia de conducir inválida para DNI ${dnichofer} (valor del ERP: "${licenciaChofer || '(vacío)'}"). ` +
           'SUNAT exige alfanumérico de 9 a 10 caracteres (regla 2573). Corregir nrochofer con el N° de brevete real.'
         );
-        throw new Error(
+        const error = new Error(
           `La licencia de conducir del conductor (DNI ${dnichofer}) no cumple el formato SUNAT: ` +
           `"${licenciaChofer || '(vacío)'}". Debe ser el N° de brevete real, alfanumérico de 9 a 10 ` +
           'caracteres (ej. "B12345678", solo mayúsculas y números). No se puede usar el DNI ni "00000000". ' +
           'Corregir el campo de licencia en el ERP y reenviar la guía.'
         );
+        error.codigo = '2573';
+        throw error;
       }
       if (dnichofer) {
         choferes.push(new Driver({

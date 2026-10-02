@@ -1,8 +1,7 @@
 require('dotenv').config();
 
 module.exports = {
-  port: process.env.PORT || 3000,
-
+  // BD central (admin): contiene Conexiones y spPyOValidaGuia
   db: {
     server: process.env.DB_SERVER || 'localhost',
     port: parseInt(process.env.DB_PORT) || 1433,
@@ -15,23 +14,25 @@ module.exports = {
     },
   },
 
+  // Endpoints de SUNAT (fijos). Las credenciales se leen de cada ERP:
+  // ruc/usuariosol/clavesol de v_empresas y client_id/client_secret de
+  // tablas_empresas (idcodigo 700014 / 700013).
   sunat: {
-    clientId: process.env.SUNAT_CLIENT_ID,
-    clientSecret: process.env.SUNAT_CLIENT_SECRET,
-    ruc: process.env.SUNAT_RUC,
-    usuarioSol: process.env.SUNAT_USUARIO_SOL,
-    claveSol: process.env.SUNAT_CLAVE_SOL,
     apiBase: 'https://api-cpe.sunat.gob.pe/v1',
     seguridadBase: 'https://api-seguridad.sunat.gob.pe/v1',
     scope: 'https://api-cpe.sunat.gob.pe',
+    consultaIntentos: parseInt(process.env.SUNAT_CONSULTA_INTENTOS) || 20,
+    consultaEspera: parseInt(process.env.SUNAT_CONSULTA_ESPERA) || 3000,
   },
 
   certificates: {
     dir: process.env.CERTIFICATES_DIR || './certificates',
   },
 
-  rutas: {
-    documentos: process.env.RUTA_DOCUMENTOS || '../DOCUMENTOS/',
-    imagenes: process.env.RUTA_IMAGENES || '../IMAGENES/',
+  // Reporte de guías pendientes con su motivo de fallo. Se sobrescribe en
+  // cada ejecución, así que solo contiene lo pendiente del día.
+  reporte: {
+    dir: process.env.REPORTE_DIR || './reportes',
+    archivo: process.env.REPORTE_ARCHIVO || 'pendientes.json',
   },
 };

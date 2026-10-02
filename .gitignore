@@ -1,8 +1,10 @@
 node_modules/
 .env
-certificates/*.pfx
-certificates/*.jks
-certificates/*.pem
-certificates/*.key
-certificates/*.crt
+reportes/
 *.log
+
+# Certificados digitales de SUNAT: nunca deben versionarse.
+# Los archivos reales no llevan extensión (por ejemplo: certificates/20228941612PFX),
+# asi que se ignora todo el contenido de la carpeta y solo se conserva .gitkeep.
+certificates/*
+!certificates/.gitkeep

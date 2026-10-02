@@ -63,12 +63,14 @@ class XmlSigner {
   }
 
   /**
-   * Extrae clave privada y certificado de un archivo PFX/P12
+   * Extrae clave privada y certificado de un archivo PFX/P12.
+   * El nombre viene de v_empresas.nomcertificadopfx; si no existe tal cual
+   * se intenta con extensión .pfx (varios PFX están guardados así).
    */
   _extraerCertificadoPfx(pfxFile, password) {
-    const pfxPath = join(this.certDir, pfxFile);
-    if (!existsSync(pfxPath)) {
-      throw new Error(`Certificado PFX no encontrado: ${pfxPath}`);
+    const pfxPath = this._resolverPfx(pfxFile);
+    if (!pfxPath) {
+      throw new Error(`Certificado PFX no encontrado: ${join(this.certDir, pfxFile)}`);
     }
 
     const p12Asn1 = forge.asn1.fromDer(forge.util.binary.raw.encode(readFileSync(pfxPath)));
@@ -88,6 +90,15 @@ class XmlSigner {
       privateKeyPem: forge.pki.privateKeyToPem(keyBag.key),
       certPem: forge.pki.certificateToPem(certBag.cert),
     };
+  }
+
+  _resolverPfx(pfxFile) {
+    const candidatos = [pfxFile, `${pfxFile}.pfx`, `${pfxFile}.p12`];
+    for (const nombre of candidatos) {
+      const ruta = join(this.certDir, nombre);
+      if (existsSync(ruta)) return ruta;
+    }
+    return null;
   }
 
   /**

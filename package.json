@@ -1,24 +1,22 @@
 {
   "name": "greenter-api",
   "version": "1.0.0",
-  "description": "API de Guías de Remisión Electrónicas - SUNAT",
+  "description": "Proceso de envío de Guías de Remisión Electrónicas a SUNAT",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "mssql": "^10.0.1",
-    "xmlbuilder2": "^3.1.1",
-    "xml-crypto": "^3.2.1",
-    "node-forge": "^1.3.1",
-    "jszip": "^3.10.1",
+    "@xmldom/xmldom": "^0.8.10",
     "axios": "^1.6.2",
-    "soap": "^1.0.0",
-    "winston": "^3.11.0"
+    "dotenv": "^16.3.1",
+    "jszip": "^3.10.1",
+    "mssql": "^10.0.1",
+    "node-forge": "^1.3.1",
+    "winston": "^3.11.0",
+    "xml-crypto": "^3.2.1",
+    "xmlbuilder2": "^3.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
